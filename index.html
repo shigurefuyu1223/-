@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マヨネーズ予約システム</title>
+    <style>
+        /* CSSは以前のコードと同じですが、予約中表示のスタイルを追加 */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #ffc107;
+            text-align: center;
+            border-bottom: 2px solid #ffc107;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        /* 新しいスタイル：予約中の表示 */
+        #status-display {
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        .status-free {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-reserved {
+            background-color: #ffeeba;
+            color: #856404;
+        }
+        /* その他のスタイルは省略（以前のコードを参照） */
+        .input-group { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
+        .input-group label { min-width: 80px; font-weight: bold; }
+        .input-group input[type="time"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; flex-grow: 1; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #reservation-list { list-style: none; padding: 0; margin-top: 20px; }
+        #reservation-list li { background-color: #e9ecef; padding: 10px; margin-bottom: 8px; border-left: 5px solid #ffc107; border-radius: 4px; font-size: 1.1em; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body onload="checkReservationStatus()">
+
+    <div class="container">
+        <h1>🥚 マヨネーズ予約システム 🥒</h1>
+
+        <div id="status-display" class="status-free">
+            現在、予約されていません
+        </div>
+
+        <hr>
+
+        <h2>🕒 新規予約</h2>
+        <div class="input-group">
+            <label for="start-time">開始時間:</label>
+            <input type="time" id="start-time" name="start-time" required>
+        </div>
+        <div class="input-group">
+            <label for="end-time">終了時間:</label>
+            <input type="time" id="end-time" name="end-time" required>
+        </div>
+
+        <button onclick="addReservation()">予約を記憶する</button>
+
+        <hr>
+
+        <h2>📋 記憶された予約</h2>
+        <ul id="reservation-list">
+            </ul>
+        <button onclick="clearReservation()" style="background-color: #dc3545; margin-top: 10px;">予約を消去する</button>
+
+    </div>
+
+    <script>
+        const RESERVATION_KEY = 'mayo_reservation_times';
+
+        /**
+         * 予約時間をブラウザのストレージに保存する
+         */
+        function addReservation() {
+            const startTime = document.getElementById('start-time').value;
+            const endTime = document.getElementById('end-time').value;
+
+            if (startTime === "" || endTime === "") {
+                alert("開始時間と終了時間を入力してください！");
+                return;
+            }
+            
+            // 予約情報をオブジェクトとして保存
+            const reservation = { start: startTime, end: endTime };
+            localStorage.setItem(RESERVATION_KEY, JSON.stringify(reservation));
+
+            // 表示を更新し、予約状況をチェック
+            displayStoredReservation();
+            checkReservationStatus();
+            
+            alert(`予約をブラウザに記憶しました: ${startTime} から ${endTime} まで`);
+
+            // 入力欄をクリア
+            document.getElementById('start-time').value = "";
+            document.getElementById('end-time').value = "";
+        }
+
+        /**
+         * 記憶された予約をリストに表示する
+         */
+        function displayStoredReservation() {
+            const list = document.getElementById('reservation-list');
+            list.innerHTML = ''; // リストをクリア
+
+            const stored = localStorage.getItem(RESERVATION_KEY);
+            if (stored) {
+                const reservation = JSON.parse(stored);
+                const listItem = document.createElement('li');
+                listItem.textContent = `${reservation.start} から ${reservation.end} まで`;
+                list.appendChild(listItem);
+            } else {
+                 const listItem = document.createElement('li');
+                 listItem.textContent = `記憶された予約はありません。`;
+                 list.appendChild(listItem);
+            }
+        }
+
+        /**
+         * 記憶された予約を消去する
+         */
+        function clearReservation() {
+            localStorage.removeItem(RESERVATION_KEY);
+            displayStoredReservation();
+            checkReservationStatus();
+            alert("記憶された予約を消去しました。");
+        }
+
+        /**
+         * 現在の時刻と予約時間を比較し、ステータスを表示する
+         * ページを開いた時 (onload) と、予約/消去した時に実行される
+         */
+        function checkReservationStatus() {
+            const statusDisplay = document.getElementById('status-display');
+            const stored = localStorage.getItem(RESERVATION_KEY);
+
+            // 記憶された予約がない場合
+            if (!stored) {
+                statusDisplay.textContent = "現在、予約されていません";
+                statusDisplay.className = 'status-free';
+                return;
+            }
+
+            const reservation = JSON.parse(stored);
+            const now = new Date();
+            
+            // 今日の日付を使って、予約の開始/終了のDateオブジェクトを作成
+            const today = now.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+            const startTimeObj = new Date(`${today}T${reservation.start}:00`);
+            const endTimeObj = new Date(`${today}T${reservation.end}:00`);
+
+            // 予約終了時間が開始時間より前の場合は、翌日と見なす（例：23:00-01:00）
+            if (endTimeObj <= startTimeObj) {
+                endTimeObj.setDate(endTimeObj.getDate() + 1);
+            }
+            
+            // 予約時間内かチェック
+            if (now >= startTimeObj && now < endTimeObj) {
+                // 予約時間内
+                statusDisplay.textContent = `🚨 予約中です！ (${reservation.start} - ${reservation.end})`;
+                statusDisplay.className = 'status-reserved';
+            } else {
+                // 予約時間外
+                statusDisplay.textContent = `現在、予約されていません (次の予約は ${reservation.start} から)`;
+                statusDisplay.className = 'status-free';
+            }
+        }
+
+        // ページ読み込み時に、記憶された予約を表示
+        document.addEventListener('DOMContentLoaded', displayStoredReservation);
+        
+        // 1分ごとに予約状況をチェックし、表示を更新
+        setInterval(checkReservationStatus, 60000); 
+
+    </script>
+
+</body>
+</html>
