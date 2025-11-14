@@ -26,12 +26,12 @@
             border-bottom: 2px solid #ffc107;
             padding-bottom: 10px;
             margin-bottom: 20px;
-            /* 1. タイトルが改行されないように設定 */
+            /* タイトルが改行されないように設定 */
             white-space: nowrap; 
             overflow: hidden; 
             text-overflow: ellipsis;
         }
-        /* 予約状況の表示エリア (見切れ対策済み) */
+        /* 予約状況の表示エリア */
         #status-display {
             padding: 15px;
             margin-top: 20px;
@@ -63,10 +63,10 @@
             min-width: 80px; 
             font-weight: bold; 
         }
-        /* ドロップダウンとdatetime-localのスタイルを調整 */
+        /* テキスト、ドロップダウン、datetime-localのスタイルを調整 */
         .input-group input[type="text"],
         .input-group input[type="datetime-local"],
-        .input-group select { /* select要素のスタイルを追加 */
+        .input-group select { 
             padding: 8px; 
             border: 1px solid #ccc; 
             border-radius: 4px; 
@@ -118,8 +118,8 @@
         <h2>新規予約</h2>
         
         <div class="input-group">
-            <label for="name">予約対象:</label>
-            <select id="name" name="name" required>
+            <label for="target-name">予約対象:</label>
+            <select id="target-name" name="target-name" required>
                 <option value="" disabled selected>-- 予約する人を選択 --</option>
                 <option value="しき">しき</option>
                 <option value="さくら">さくら</option>
@@ -133,6 +133,11 @@
                 <option value="アピ丸">アピ丸</option>
                 <option value="ここね">ここね</option>
             </select>
+        </div>
+
+        <div class="input-group">
+            <label for="reserver-name">予約者:</label>
+            <input type="text" id="reserver-name" name="reserver-name" required placeholder="あなたの名前を入力">
         </div>
 
         <div class="input-group">
@@ -151,13 +156,13 @@
         <h2>予約状況</h2>
         <ul id="reservation-list">
             </ul>
-        <button onclick="clearReservation()" style="background-color: #dc3545; margin-top: 10px;">予約を消去する</button>
+        <button onclick="clearReservation()" style="background-color: #dc3545; margin-top: 10px;">予約を消去する (スプレッドシートを直接編集してください)</button>
 
     </div>
 
     <script>
-        // 💡 修正点 3: GASのURLを修正（不正確なURL記述を修正し、ユーザーに貼り付けを促す）
-        const GAS_URL = "【あなたのGAS URLをここに貼り付けてください】";
+        // !! ここに、デプロイしたGASのURLを貼り付けてください !!
+        const GAS_URL = "【あなたのGAS URLをここに貼り付けてください】"; 
         
         const RESERVATION_KEY = 'mayo_reservation_times';
 
@@ -165,19 +170,23 @@
          * 予約情報をGASに送信し、ブラウザのストレージに保存する
          */
         function addReservation() {
-            // 💡 修正点 2: input[type="text"]からselect要素に変更
-            const name = document.getElementById('name').value;
+            // 予約対象の名前を取得 (IDをtarget-nameに変更)
+            const targetName = document.getElementById('target-name').value;
+            // 予約者（誰が登録したか）の名前を取得
+            const reserverName = document.getElementById('reserver-name').value;
+            
             const startTime = document.getElementById('start-time').value; 
             const endTime = document.getElementById('end-time').value;
 
-            if (name === "" || startTime === "" || endTime === "") {
-                alert("予約対象、開始日時、終了日時のすべてを選択・入力してください！");
+            if (targetName === "" || reserverName === "" || startTime === "" || endTime === "") {
+                alert("すべての項目を選択・入力してください！");
                 return;
             }
             
             // サーバー（GAS）へ送信するデータ形式を準備
             const reservationData = { 
-                name: name, 
+                name: targetName, // 予約対象
+                reserver: reserverName, // 予約者 (追加)
                 start: startTime, 
                 end: endTime 
             };
@@ -185,21 +194,16 @@
             // GASへデータを送信
             fetch(GAS_URL, {
                 method: 'POST',
-                // GASはtext/plainを要求する可能性があるため、Content-Typeを調整するか、
-                // GAS側で application/json を処理できるようにする必要があります。
-                // ここでは、一旦JSONを送信する一般的な方法を維持します。
                 headers: {
-                    'Content-Type': 'text/plain;charset=utf-8', // GASのデフォルト設定に合わせる
+                    'Content-Type': 'text/plain;charset=utf-8', 
                 },
                 body: JSON.stringify(reservationData), 
             })
             .then(response => {
-                 // GASがJSON以外を返す可能性があるため、テキストとして処理を試みる
                  return response.text().then(text => {
                     try {
                         return JSON.parse(text);
                     } catch (e) {
-                        console.error('GASからの応答がJSONではありません:', text);
                         throw new Error('GASからの応答形式が不正です。');
                     }
                  });
@@ -207,15 +211,14 @@
             .then(result => {
                 if (result && result.result === 'success') {
                     // サーバーへの送信が成功したら、ローカルにも情報を記憶（表示のため）
-                    const localSave = { name: name, start: startTime, end: endTime };
+                    const localSave = { name: targetName, reserver: reserverName, start: startTime, end: endTime };
                     localStorage.setItem(RESERVATION_KEY, JSON.stringify(localSave));
                     
                     displayStoredReservation();
                     checkReservationStatus();
-                    alert(`${name} さんの予約を送信し、ブラウザに記憶しました！`);
+                    alert(`予約対象:${targetName} さんの予約を予約者:${reserverName} さんが送信しました！`);
                     
                 } else {
-                    // エラーメッセージがあれば表示、なければ一般的な失敗メッセージ
                     alert(`予約送信中にエラーが発生しました: ${result ? result.message : '不明なエラー'}`);
                 }
             })
@@ -225,7 +228,8 @@
             });
 
             // 入力欄をクリア
-            document.getElementById('name').value = ""; // ドロップダウンをリセット
+            document.getElementById('target-name').value = "";
+            document.getElementById('reserver-name').value = "";
             document.getElementById('start-time').value = "";
             document.getElementById('end-time').value = "";
         }
@@ -246,7 +250,8 @@
                 const startDisplay = reservation.start.replace('T', ' ');
                 const endDisplay = reservation.end.replace('T', ' ');
 
-                listItem.textContent = `${reservation.name} さん: ${startDisplay} から ${endDisplay} まで`;
+                // 予約者と予約対象を表示
+                listItem.textContent = `[予約者: ${reservation.reserver}] ${reservation.name} さん: ${startDisplay} から ${endDisplay} まで`;
                 list.appendChild(listItem);
             } else {
                  const listItem = document.createElement('li');
@@ -256,10 +261,11 @@
         }
 
         function clearReservation() {
+            // 共有システムのため、ローカル保存のみ消去
             localStorage.removeItem(RESERVATION_KEY);
             displayStoredReservation();
             checkReservationStatus();
-            alert("記憶された予約を消去しました。");
+            alert("ブラウザに記憶された予約を消去しました。");
         }
 
         /**
@@ -286,13 +292,11 @@
             const endDisplay = reservation.end.replace('T', ' ');
 
             if (now >= startTimeObj && now < endTimeObj) {
-                // 予約中の表示に名前を含める
-                statusDisplay.textContent = `${reservation.name} さんの予約中です (${startDisplay} - ${endDisplay})`;
+                // 予約中の表示に予約者と予約対象を含める
+                statusDisplay.textContent = `${reservation.name} さんの予約中です (予約者: ${reservation.reserver}) (${startDisplay} - ${endDisplay})`;
                 statusDisplay.className = 'status-reserved';
             } else {
-                // 予約時間外の表示に名前を含める
-                // ※ このローカルストレージの機能は、予約が終了しても自動で消えません。
-                // 共有機能（GAS）と統合すれば、過去の予約はリストから消えます。
+                // 予約時間外の表示に予約者と予約対象を含める
                 statusDisplay.textContent = `現在、予約されていません (次の予約は ${reservation.name} さんの ${startDisplay} から)`;
                 statusDisplay.className = 'status-free';
             }
