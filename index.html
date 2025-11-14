@@ -26,11 +26,9 @@
             border-bottom: 2px solid #ffc107;
             padding-bottom: 10px;
             margin-bottom: 20px;
-            /* タイトルが改行されないように設定 */
             white-space: nowrap; 
             overflow: hidden; 
             text-overflow: ellipsis;
-            /* ★★★ フォントサイズを小さく修正 ★★★ */
             font-size: 26px; 
         }
         /* 予約状況の表示エリア */
@@ -41,10 +39,7 @@
             text-align: center;
             font-size: 1.1em; 
             font-weight: bold;
-            white-space: nowrap; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
-            display: block;
+            min-height: 20px; /* 内容がなくても高さを確保 */
         }
         .status-free {
             background-color: #d4edda;
@@ -55,6 +50,7 @@
             color: #856404;
         }
         /* その他の入力フォームとボタンのスタイル */
+        h2 { margin-top: 20px; }
         .input-group { 
             margin-bottom: 15px; 
             display: flex; 
@@ -94,25 +90,45 @@
             padding: 0; 
             margin-top: 20px; 
         }
+        /* 予約リストの表示を改善 */
         #reservation-list li { 
             background-color: #e9ecef; 
             padding: 10px; 
             margin-bottom: 8px; 
             border-left: 5px solid #ffc107; 
             border-radius: 4px; 
-            font-size: 1.1em; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
+            font-size: 1em; /* 欄に入るように少し小さく */
+        }
+        #reservation-list li strong {
+            color: #007bff;
         }
     </style>
 </head>
-<body onload="checkReservationStatus()">
+<body onload="initSystem()">
 
     <div class="container">
         <h1>マヨゲイズシステム</h1>
 
+        <div class="input-group">
+            <label for="target-name-display">予約対象:</label>
+            <select id="target-name-display" name="target-name-display" required onchange="checkReservationStatus(this.value)">
+                <option value="" disabled selected>-- 予約する人を選択 --</option>
+                <option value="しき">しき</option>
+                <option value="さくら">さくら</option>
+                <option value="あちゃ">あちゃ</option>
+                <option value="マヨネーズ">マヨネーズ</option>
+                <option value="じゃがりこ">じゃがりこ</option>
+                <option value="とも">とも</option>
+                <option value="ラスカル">ラスカル</option>
+                <option value="ぽむ">ぽむ</option>
+                <option value="まお">まお</option>
+                <option value="アピ丸">アピ丸</option>
+                <option value="ここね">ここね</option>
+            </select>
+        </div>
+
         <div id="status-display" class="status-free">
+            ⬆️ 予約対象を選択してください
         </div>
 
         <hr>
@@ -120,8 +136,8 @@
         <h2>新規予約</h2>
         
         <div class="input-group">
-            <label for="target-name">予約対象:</label>
-            <select id="target-name" name="target-name" required>
+            <label for="target-name-new">予約対象:</label>
+            <select id="target-name-new" name="target-name-new" required>
                 <option value="" disabled selected>-- 予約する人を選択 --</option>
                 <option value="しき">しき</option>
                 <option value="さくら">さくら</option>
@@ -155,10 +171,10 @@
 
         <hr>
 
-        <h2>予約状況</h2>
+        <h2>すべての予約状況</h2>
         <ul id="reservation-list">
             </ul>
-        <button onclick="clearReservation()" style="background-color: #dc3545; margin-top: 10px;">予約を消去する (スプレッドシートを直接編集してください)</button>
+        <button onclick="clearAllReservations()" style="background-color: #dc3545; margin-top: 10px;">すべての予約を消去する (スプレッドシートを直接編集してください)</button>
 
     </div>
 
@@ -166,31 +182,90 @@
         // !! ここに、デプロイしたGASのURLを貼り付けてください !!
         const GAS_URL = "【あなたのGAS URLをここに貼り付けてください】"; 
         
-        const RESERVATION_KEY = 'mayo_reservation_times';
+        // 予約データを複数保存するためのキーに変更
+        const RESERVATION_KEY = 'mayo_all_reservations';
+        
+        /**
+         * ユーティリティ: ローカルストレージから全予約データを取得
+         * @returns {Array} 予約オブジェクトの配列
+         */
+        function getReservations() {
+            const stored = localStorage.getItem(RESERVATION_KEY);
+            // JSONパースが失敗するか、データが空の場合は空の配列を返す
+            return stored ? JSON.parse(stored) : [];
+        }
 
         /**
-         * 予約情報をGASに送信し、ブラウザのストレージに保存する
+         * ユーティリティ: 予約データをローカルストレージに保存
+         * @param {Array} reservations - 保存する予約オブジェクトの配列
+         */
+        function saveReservations(reservations) {
+            localStorage.setItem(RESERVATION_KEY, JSON.stringify(reservations));
+        }
+
+        /**
+         * 予約時間が重複しているかチェック
+         * @param {string} newTargetName - 新規予約の対象名
+         * @param {Date} newStart - 新規予約の開始日時
+         * @param {Date} newEnd - 新規予約の終了日時
+         * @returns {boolean} 重複があればtrue
+         */
+        function isTimeSlotReserved(newTargetName, newStart, newEnd) {
+            const reservations = getReservations();
+            
+            // 新規予約が不正な期間でないかチェック
+            if (newStart >= newEnd) {
+                return true; // 不正な期間も重複と見なして拒否
+            }
+
+            // 選択された予約対象に絞って、既存の予約と時間重複がないかチェック
+            return reservations.some(res => {
+                const existingStart = new Date(res.start);
+                const existingEnd = new Date(res.end);
+                
+                // 予約対象が同じで、時間が重複している場合
+                // (既存の開始 < 新規の終了) AND (新規の開始 < 既存の終了) の場合に重複
+                if (res.name === newTargetName) {
+                    if (existingStart < newEnd && newStart < existingEnd) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        /**
+         * 予約情報をGASに送信し、ブラウザのストレージに保存する（重複チェック付き）
          */
         function addReservation() {
-            const targetName = document.getElementById('target-name').value;
+            const targetName = document.getElementById('target-name-new').value; // 新規予約用のドロップダウン
             const reserverName = document.getElementById('reserver-name').value;
-            
-            const startTime = document.getElementById('start-time').value; 
-            const endTime = document.getElementById('end-time').value;
+            const startTimeStr = document.getElementById('start-time').value; 
+            const endTimeStr = document.getElementById('end-time').value;
 
-            if (targetName === "" || reserverName === "" || startTime === "" || endTime === "") {
+            if (targetName === "" || reserverName === "" || startTimeStr === "" || endTimeStr === "") {
                 alert("すべての項目を選択・入力してください！");
                 return;
             }
             
+            const startTime = new Date(startTimeStr);
+            const endTime = new Date(endTimeStr);
+
+            // 1. 予約の重複チェック
+            if (isTimeSlotReserved(targetName, startTime, endTime)) {
+                alert("その時間は既に予約されてるっちゃむ");
+                return;
+            }
+
             const reservationData = { 
-                name: targetName, // 予約対象
-                reserver: reserverName, // 予約者 
-                start: startTime, 
-                end: endTime 
+                name: targetName, 
+                reserver: reserverName, 
+                start: startTimeStr, 
+                end: endTimeStr 
             };
 
-            // GASへデータを送信
+            // 2. GASへデータを送信
+            // GASへの通信が失敗しても、ローカルに保存しないことで、再送信を促す
             fetch(GAS_URL, {
                 method: 'POST',
                 headers: {
@@ -209,12 +284,22 @@
             })
             .then(result => {
                 if (result && result.result === 'success') {
-                    // サーバーへの送信が成功したら、ローカルにも情報を記憶（表示のため）
-                    const localSave = { name: targetName, reserver: reserverName, start: startTime, end: endTime };
-                    localStorage.setItem(RESERVATION_KEY, JSON.stringify(localSave));
+                    // 3. サーバーへの送信が成功したら、ローカルのリストに追加
+                    const allReservations = getReservations();
+                    allReservations.push(reservationData);
+                    saveReservations(allReservations);
                     
-                    displayStoredReservation();
-                    checkReservationStatus();
+                    // 画面を更新
+                    displayAllReservations();
+                    // 予約状況の表示も更新（もし新規予約の対象が選択されていれば）
+                    const selectedTarget = document.getElementById('target-name-display').value;
+                    if (selectedTarget === targetName) {
+                        checkReservationStatus(targetName);
+                    } else {
+                        // 予約対象が選択されていない場合でも、リスト更新は行う
+                        checkReservationStatus(selectedTarget);
+                    }
+
                     alert(`予約対象:${targetName} さんの予約を予約者:${reserverName} さんが送信しました！`);
                     
                 } else {
@@ -226,83 +311,134 @@
                 console.error('通信エラー:', error);
             });
 
-            // 入力欄をクリア
-            document.getElementById('target-name').value = "";
+            // 4. 入力欄をクリア
+            document.getElementById('target-name-new').value = "";
             document.getElementById('reserver-name').value = "";
             document.getElementById('start-time').value = "";
             document.getElementById('end-time').value = "";
         }
 
         /**
-         * 記憶された予約をリストに表示する
+         * 期限切れの予約をローカルストレージから削除し、残りの予約をリストに表示する
          */
-        function displayStoredReservation() {
+        function displayAllReservations() {
             const list = document.getElementById('reservation-list');
             list.innerHTML = ''; 
 
-            const stored = localStorage.getItem(RESERVATION_KEY);
-            if (stored) {
-                const reservation = JSON.parse(stored);
-                const listItem = document.createElement('li');
-                
-                // 日付と時刻の表示を整形 (Tで区切って表示)
-                const startDisplay = reservation.start.replace('T', ' ');
-                const endDisplay = reservation.end.replace('T', ' ');
+            let allReservations = getReservations();
+            const now = new Date();
+            
+            // 期限切れの予約をフィルタリング (終了時刻 < 現在時刻 の予約を削除)
+            const activeReservations = allReservations.filter(res => {
+                const endTimeObj = new Date(res.end);
+                return endTimeObj > now;
+            });
 
-                // 予約者と予約対象を表示
-                listItem.textContent = `[予約者: ${reservation.reserver}] ${reservation.name} さん: ${startDisplay} から ${endDisplay} まで`;
-                list.appendChild(listItem);
+            // 期限切れの予約が削除されたら、ローカルストレージを更新
+            if (activeReservations.length !== allReservations.length) {
+                saveReservations(activeReservations);
+                allReservations = activeReservations;
+            }
+
+            if (allReservations.length > 0) {
+                // 開始時刻が近い順にソート（任意）
+                allReservations.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+                allReservations.forEach(reservation => {
+                    const listItem = document.createElement('li');
+                    
+                    // 日付と時刻の表示を整形 (Tで区切って表示)
+                    const startDisplay = reservation.start.replace('T', ' ');
+                    const endDisplay = reservation.end.replace('T', ' ');
+
+                    // 誰が誰を予約したかを強調して表示
+                    listItem.innerHTML = `
+                        <strong>${reservation.reserver}</strong> さんが 
+                        <strong>${reservation.name}</strong> さんを予約: 
+                        <br>
+                        ${startDisplay} から ${endDisplay} まで
+                    `;
+                    list.appendChild(listItem);
+                });
             } else {
                  const listItem = document.createElement('li');
-                 listItem.textContent = `記憶された予約はありません。`;
+                 listItem.textContent = `記憶されたアクティブな予約はありません。`;
                  list.appendChild(listItem);
             }
         }
 
-        function clearReservation() {
+        /**
+         * 全予約をローカルストレージから消去
+         */
+        function clearAllReservations() {
             localStorage.removeItem(RESERVATION_KEY);
-            displayStoredReservation();
-            checkReservationStatus();
-            alert("ブラウザに記憶された予約を消去しました。");
+            displayAllReservations();
+            checkReservationStatus(document.getElementById('target-name-display').value);
+            alert("ブラウザに記憶されたすべての予約を消去しました。");
         }
 
         /**
-         * 現在の時刻と予約時間を比較し、ステータスを表示する
+         * 選択された予約対象の現在の予約状況をチェックし、表示する
+         * @param {string} targetName - チェックする予約対象の名前
          */
-        function checkReservationStatus() {
+        function checkReservationStatus(targetName) {
             const statusDisplay = document.getElementById('status-display');
-            const stored = localStorage.getItem(RESERVATION_KEY);
-
-            if (!stored) {
-                statusDisplay.textContent = "現在、予約されていません";
+            const allReservations = getReservations();
+            const now = new Date();
+            
+            // 予約対象が選択されていない場合はメッセージのみ
+            if (!targetName) {
+                statusDisplay.textContent = "⬆️ 予約対象を選択してください";
                 statusDisplay.className = 'status-free';
                 return;
             }
 
-            const reservation = JSON.parse(stored);
-            const now = new Date();
-            
-            const startTimeObj = new Date(reservation.start);
-            const endTimeObj = new Date(reservation.end);
-            
-            // 表示用の整形
-            const startDisplay = reservation.start.replace('T', ' ');
-            const endDisplay = reservation.end.replace('T', ' ');
+            // 選択された予約対象の、現在時刻に有効な予約を探す
+            const currentReservation = allReservations.find(res => {
+                if (res.name !== targetName) return false;
+                
+                const startTimeObj = new Date(res.start);
+                const endTimeObj = new Date(res.end);
+                
+                return now >= startTimeObj && now < endTimeObj;
+            });
 
-            if (now >= startTimeObj && now < endTimeObj) {
-                // 予約中の表示に予約者と予約対象を含める
-                statusDisplay.textContent = `${reservation.name} さんの予約中です (予約者: ${reservation.reserver}) (${startDisplay} - ${endDisplay})`;
+            if (currentReservation) {
+                // 予約中の表示
+                const startDisplay = currentReservation.start.replace('T', ' ');
+                const endDisplay = currentReservation.end.replace('T', ' ');
+                statusDisplay.textContent = `${targetName} さんは予約者: ${currentReservation.reserver} さんにより予約中です (${startDisplay} - ${endDisplay})`;
                 statusDisplay.className = 'status-reserved';
             } else {
-                // 予約時間外の表示に予約者と予約対象を含める
-                statusDisplay.textContent = `現在、予約されていません (次の予約は ${reservation.name} さんの ${startDisplay} から)`;
+                // 次の予約を探す
+                const nextReservation = allReservations
+                    .filter(res => res.name === targetName && new Date(res.start) > now)
+                    .sort((a, b) => new Date(a.start) - new Date(b.start))[0]; // 開始時刻が最も早いものを取得
+
+                if (nextReservation) {
+                    const startDisplay = nextReservation.start.replace('T', ' ');
+                    statusDisplay.textContent = `${targetName} さんは現在、予約されていません (次の予約は ${startDisplay} から)`;
+                } else {
+                    statusDisplay.textContent = `${targetName} さんは現在、予約されていません`;
+                }
                 statusDisplay.className = 'status-free';
             }
         }
 
-        document.addEventListener('DOMContentLoaded', displayStoredReservation);
-        // 1分ごとにステータスをチェック
-        setInterval(checkReservationStatus, 60000); 
+        /**
+         * システム起動時の初期化処理
+         */
+        function initSystem() {
+            // 期限切れ予約の削除とリスト表示を最初に実行
+            displayAllReservations(); 
+            // 1分ごとにステータスチェックと期限切れ予約の削除を実行
+            setInterval(() => {
+                // 期限切れの予約を削除・リストを更新
+                displayAllReservations(); 
+                // 選択中の予約対象のステータスを更新
+                checkReservationStatus(document.getElementById('target-name-display').value);
+            }, 60000); 
+        }
 
     </script>
 
