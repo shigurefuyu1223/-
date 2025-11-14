@@ -30,6 +30,8 @@
             white-space: nowrap; 
             overflow: hidden; 
             text-overflow: ellipsis;
+            /* ★★★ フォントサイズを小さく修正 ★★★ */
+            font-size: 28px; 
         }
         /* 予約状況の表示エリア */
         #status-display {
@@ -170,9 +172,7 @@
          * 予約情報をGASに送信し、ブラウザのストレージに保存する
          */
         function addReservation() {
-            // 予約対象の名前を取得 (IDをtarget-nameに変更)
             const targetName = document.getElementById('target-name').value;
-            // 予約者（誰が登録したか）の名前を取得
             const reserverName = document.getElementById('reserver-name').value;
             
             const startTime = document.getElementById('start-time').value; 
@@ -183,10 +183,9 @@
                 return;
             }
             
-            // サーバー（GAS）へ送信するデータ形式を準備
             const reservationData = { 
                 name: targetName, // 予約対象
-                reserver: reserverName, // 予約者 (追加)
+                reserver: reserverName, // 予約者 
                 start: startTime, 
                 end: endTime 
             };
@@ -261,7 +260,6 @@
         }
 
         function clearReservation() {
-            // 共有システムのため、ローカル保存のみ消去
             localStorage.removeItem(RESERVATION_KEY);
             displayStoredReservation();
             checkReservationStatus();
