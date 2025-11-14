@@ -34,13 +34,14 @@
         /* 予約状況の表示エリア */
         #status-display {
             padding: 15px;
-            margin-top: 20px;
-            margin-bottom: 10px; /* 新規予約との間に少しスペースを空ける */
+            /* 修正: H1とH2の間に来るためマージンを調整 */
+            margin-top: 10px; 
+            margin-bottom: 20px; 
             border-radius: 6px;
             text-align: center;
             font-size: 1.1em; 
             font-weight: bold;
-            min-height: 20px; /* 内容がなくても高さを確保 */
+            min-height: 20px; 
         }
         .status-free {
             background-color: #d4edda;
@@ -110,6 +111,10 @@
     <div class="container">
         <h1>マヨゲイズシステム</h1>
 
+        <hr>
+
+        <h2>新規予約</h2>
+        
         <div class="input-group">
             <label for="target-name">予約対象:</label>
             <select id="target-name" name="target-name" required onchange="checkReservationStatus(this.value)">
@@ -127,15 +132,11 @@
                 <option value="ここね">ここね</option>
             </select>
         </div>
-
+        
         <div id="status-display" class="status-free">
             ⬆️ 予約対象を選択してください
         </div>
 
-        <hr>
-
-        <h2>新規予約</h2>
-        
         <div class="input-group">
             <label for="reserver-name">予約者:</label>
             <input type="text" id="reserver-name" name="reserver-name" required placeholder="あなたの名前を入力">
