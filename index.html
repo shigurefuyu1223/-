@@ -182,7 +182,7 @@
         // !! ここに、デプロイしたGASのURLを貼り付けてください !!
         const GAS_URL = "【あなたのGAS URLをここに貼り付けてください】"; 
         
-        // 予約データを複数保存するためのキーに変更
+        // 予約データを複数保存するためのキー
         const RESERVATION_KEY = 'mayo_all_reservations';
         
         /**
@@ -362,7 +362,8 @@
                 });
             } else {
                  const listItem = document.createElement('li');
-                 listItem.textContent = `記憶されたアクティブな予約はありません。`;
+                 // 🌟 変更後のメッセージ 🌟
+                 listItem.textContent = `予約されてないっちゃむ。`;
                  list.appendChild(listItem);
             }
         }
